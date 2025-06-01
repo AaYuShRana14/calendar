@@ -466,7 +466,7 @@ const handleEdit = (appointment) => {
               </div>
             ) : (
               <div className="space-y-4">
-                {appointments.map(appointment => {t
+                {appointments.map(appointment => {
                    const name = appointment.summary 
         ? appointment.summary.replace('Meeting with ', '') 
         : '';

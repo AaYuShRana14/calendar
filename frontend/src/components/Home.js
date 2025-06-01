@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, MapPin, User, Check, X, Edit, Trash2, Phone } from 'lucide-react';
+import { Calendar, Clock, MapPin, User, Check, X, Edit, Trash2, Phone, ChevronLeft, ChevronRight } from 'lucide-react';
+import axios from 'axios';
 
 const Home = () => {
   const [formData, setFormData] = useState({
@@ -7,56 +8,62 @@ const Home = () => {
     city: '',
     phone: '',
     date: '',
-    time: '',
-    notes: ''
+    time: ''
   });
-  if (!localStorage.getItem('calenderr')) {
-    window.location.href = '/login';
-  }
+
   const [appointments, setAppointments] = useState([]);
-  const [availableSlots, setAvailableSlots] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [showTimeSlots, setShowTimeSlots] = useState(false);
+  const [bookedSlots, setBookedSlots] = useState([]);
+  const [error, setError] = useState('');
 
-  const generateAvailableSlots = () => {
-    const slots = [];
-    const today = new Date();
-    
-    for (let i = 1; i <= 7; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      
-      // Skip weekends
-      if (date.getDay() === 0 || date.getDay() === 6) continue;
-      
-      const dateStr = date.toISOString().split('T')[0];
-      const times = ['09:00', '10:00', '11:00', '14:00', '15:00', '16:00'];
-      
-      times.forEach(time => {
-        // Mock some slots as booked
-        const isBooked = Math.random() < 0.3;
-        if (!isBooked) {
-          slots.push({
-            date: dateStr,
-            time: time,
-            available: true
-          });
-        }
-      });
-    }
-    setAvailableSlots(slots);
-  };
+  const timeSlots = [
+    '09:00', '10:00', '11:00', '12:00', '13:00', '14:00',
+    '15:00', '16:00', '17:00', '18:00', '19:00'
+  ];
+
+  const API_BASE_URL = 'http://localhost:8000';
+  useEffect(() => {
+    fetchAppointments();
+  }, []);
 
   useEffect(() => {
-    // Don't auto-initialize, wait for user to click sign in
-  }, []);
+    const slots = appointments.map(apt => {
+      const startDateTime = new Date(apt.start.dateTime);
+      const date = startDateTime.toISOString().split('T')[0];
+      const time = startDateTime.toLocaleTimeString('en-US', { 
+        hour12: false, 
+        hour: '2-digit', 
+        minute: '2-digit',
+        timeZone: 'Asia/Kolkata'
+      });
+      return { date, time };
+    });
+    setBookedSlots(slots);
+  }, [appointments]);
+
+  const fetchAppointments = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/event`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('calenderr')}`
+        }
+      });
+      setAppointments(response.data);
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+    }
+  };
 
   const handleInputChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     });
+    setError('');
   };
 
   const validateForm = () => {
@@ -69,75 +76,166 @@ const Home = () => {
   };
 
   const handleSubmit = async () => {
-    const error = validateForm();
-    if (error) {
-      alert(error);
+    console.log('Submitting form with data:', formData);
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
     setLoading(true);
+    setError('');
     
     try {
-      // Mock API call to create calendar event
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const newAppointment = {
-        id: editingId || Date.now(),
-        ...formData,
-        status: 'confirmed',
-        createdAt: new Date().toISOString()
+      const requestData = {
+        name: formData.name,
+        phone: formData.phone,
+        date: formData.date,
+        time: formData.time
       };
 
+      const config = {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('calenderr')}`
+        }
+      };
+
+      let response;
       if (editingId) {
-        setAppointments(prev => prev.map(apt => 
-          apt.id === editingId ? newAppointment : apt
-        ));
-        setEditingId(null);
+        response = await axios.put(`${API_BASE_URL}/event/update/${editingId}`, requestData, config);
       } else {
-        setAppointments(prev => [...prev, newAppointment]);
+        response = await axios.post(`${API_BASE_URL}/event/create`, requestData, config);
       }
 
-      setFormData({
-        name: '',
-        city: '',
-        phone: '',
-        date: '',
-        time: '',
-        notes: ''
-      });
+      if (response.status === 200 || response.status === 201) {
+        await fetchAppointments();
+        setFormData({
+          name: '',
+          city: '',
+          phone: '',
+          date: '',
+          time: '',
+        });
 
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
+        setEditingId(null);
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 3000);
+      }
       
     } catch (error) {
-      console.error('Error creating appointment:', error);
-      alert('Failed to create appointment');
+      console.error('Error saving appointment:', error);
+      if (error.response && error.response.data && error.response.data.message) {
+        setError(error.response.data.message);
+      } else {
+        setError('Failed to save appointment. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEdit = (appointment) => {
+    const name = appointment.summary.replace('Meeting with ', '');
+    const phone = appointment.description.replace('Phone: ', '');
+    
+    const startDateTime = new Date(appointment.start.dateTime);
+    const date = startDateTime.toISOString().split('T')[0];
+    const time = startDateTime.toLocaleTimeString('en-US', { 
+      hour12: false, 
+      hour: '2-digit', 
+      minute: '2-digit',
+      timeZone: 'Asia/Kolkata'
+    });
+
+    setFormData({
+      name: name,
+      city: 'Delhi', 
+      phone: phone,
+      date: date,
+      time: time
+    });
+    setEditingId(appointment.id);
   };
 
   const handleCancel = async (id) => {
     if (window.confirm('Are you sure you want to cancel this appointment?')) {
       setLoading(true);
       try {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setAppointments(prev => prev.filter(apt => apt.id !== id));
+        const response = await axios.delete(`${API_BASE_URL}/event/delete/${id}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('calenderr')}`
+          }
+        });
+
+        if (response.status === 200) {
+          await fetchAppointments();
+        }
+      } catch (error) {
+        console.error('Error canceling appointment:', error);
+        if (error.response && error.response.data && error.response.data.message) {
+          setError(error.response.data.message);
+        } else {
+          setError('Failed to cancel appointment');
+        }
       } finally {
         setLoading(false);
       }
     }
   };
 
-  const getAvailableTimesForDate = (selectedDate) => {
-    return availableSlots
-      .filter(slot => slot.date === selectedDate)
-      .map(slot => slot.time);
+  const getNext7Days = () => {
+    const days = [];
+    const today = new Date();
+    
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      days.push(date);
+    }
+    
+    return days;
   };
 
-  const getAvailableDates = () => {
-    const dates = [...new Set(availableSlots.map(slot => slot.date))];
-    return dates.sort();
+  const isDateAvailable = (date) => {
+    const dayOfWeek = date.getDay();
+    return dayOfWeek >= 1 && dayOfWeek <= 5;
+  };
+
+  const isTimeSlotAvailable = (date, time) => {
+    const dateStr = date.toISOString().split('T')[0];
+    return !bookedSlots.some(slot => slot.date === dateStr && slot.time === time);
+  };
+
+  const handleDateSelect = (date) => {
+    if (!isDateAvailable(date)) return;
+    
+    const dateStr = date.toISOString().split('T')[0];
+    setFormData({ ...formData, date: dateStr, time: '' });
+    setShowCalendar(false);
+    setShowTimeSlots(true);
+  };
+
+  const handleTimeSelect = (time) => {
+    setFormData({ ...formData, time });
+    setShowTimeSlots(false);
+  };
+
+  const getAvailableTimesForDate = (dateStr) => {
+    return timeSlots.filter(time => {
+      const date = new Date(dateStr);
+      return isTimeSlotAvailable(date, time);
+    });
+  };
+
+  const formatDate = (dateStr) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
   };
 
   return (
@@ -155,9 +253,15 @@ const Home = () => {
                 <Calendar className="w-5 h-5 text-blue-600" />
               </div>
               <h2 className="text-2xl font-bold text-gray-800">
-                New Appointment
+                {editingId ? 'Edit Appointment' : 'New Appointment'}
               </h2>
             </div>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-100 border border-red-300 rounded-lg text-red-700">
+                {error}
+              </div>
+            )}
 
             <div className="space-y-6">
               <div>
@@ -175,6 +279,7 @@ const Home = () => {
                   required
                 />
               </div>
+              
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   <MapPin className="w-4 h-4 inline mr-2" />
@@ -193,6 +298,7 @@ const Home = () => {
                   <p className="text-red-500 text-sm mt-1">Only people from Delhi can take appointments</p>
                 )}
               </div>
+              
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   <Phone className="w-4 h-4 inline mr-2" />
@@ -208,69 +314,116 @@ const Home = () => {
                   required
                 />
               </div>
+
+              {/* Date Selection - Next 7 Days */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   <Calendar className="w-4 h-4 inline mr-2" />
-                  Select Date
+                  Select Date (Next 7 Days)
                 </label>
-                <select
-                  name="date"
-                  value={formData.date}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  required
+                <button
+                  type="button"
+                  onClick={() => setShowCalendar(!showCalendar)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-left"
                 >
-                  <option value="">Choose a date</option>
-                  {getAvailableDates().map(date => (
-                    <option key={date} value={date}>
-                      {new Date(date).toLocaleDateString('en-US', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
+                  {formData.date ? formatDate(formData.date) : 'Choose a date'}
+                </button>
+
+                {/* Date Selection Modal */}
+                {showCalendar && (
+                  <div className="mt-2 p-4 border border-gray-200 rounded-lg bg-white shadow-lg">
+                    <h3 className="font-semibold mb-3">Available Dates (Weekdays Only)</h3>
+                    <div className="space-y-2">
+                      {getNext7Days().map((date, index) => {
+                        const isAvailable = isDateAvailable(date);
+                        const dateStr = date.toISOString().split('T')[0];
+                        const isSelected = formData.date === dateStr;
+                        const isToday = index === 0;
+
+                        return (
+                          <button
+                            key={dateStr}
+                            onClick={() => handleDateSelect(date)}
+                            disabled={!isAvailable}
+                            className={`w-full p-3 text-left rounded-lg transition-colors ${
+                              isSelected
+                                ? 'bg-blue-600 text-white'
+                                : isAvailable
+                                ? 'hover:bg-blue-100 text-gray-800 border border-gray-200'
+                                : 'text-gray-300 cursor-not-allowed bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium">
+                                {date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                                {isToday && ' (Today)'}
+                              </span>
+                              {!isAvailable && <span className="text-xs">Weekend</span>}
+                            </div>
+                          </button>
+                        );
                       })}
-                    </option>
-                  ))}
-                </select>
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {/* Time Selection */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   <Clock className="w-4 h-4 inline mr-2" />
                   Select Time
                 </label>
-                <select
-                  name="time"
-                  value={formData.time}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  required
-                  disabled={!formData.date}
-                >
-                  <option value="">Choose a time</option>
-                  {formData.date && getAvailableTimesForDate(formData.date).map(time => (
-                    <option key={time} value={time}>
-                      {time}
-                    </option>
-                  ))}
-                </select>
-              </div>
-                            
-             
                 <button
                   type="button"
-                  onClick={handleSubmit}
-                  disabled={loading}
-                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 px-6 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => formData.date && setShowTimeSlots(!showTimeSlots)}
+                  disabled={!formData.date}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-left disabled:bg-gray-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? (
-                    <div className="flex items-center justify-center">
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                      Processing...
-                    </div>
-                  ) : (
-                    'Book Appointment'
-                  )}
+                  {formData.time || 'Choose a time'}
                 </button>
+
+                {/* Time Slots Modal */}
+                {showTimeSlots && formData.date && (
+                  <div className="mt-2 p-4 border border-gray-200 rounded-lg bg-white shadow-lg">
+                    <h3 className="font-semibold mb-3">Available Times</h3>
+                    <div className="grid grid-cols-3 gap-2">
+                      {getAvailableTimesForDate(formData.date).map(time => (
+                        <button
+                          key={time}
+                          onClick={() => handleTimeSelect(time)}
+                          className={`p-2 text-center rounded-lg transition-colors ${
+                            formData.time === time
+                              ? 'bg-blue-600 text-white'
+                              : 'border border-gray-300 hover:bg-blue-50'
+                          }`}
+                        >
+                          {time}
+                        </button>
+                      ))}
+                    </div>
+                    {getAvailableTimesForDate(formData.date).length === 0 && (
+                      <p className="text-gray-500 text-center py-4">No available times for this date</p>
+                    )}
+                  </div>
+                )}
+              </div>
+                            
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 px-6 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <div className="flex items-center justify-center">
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Processing...
+                  </div>
+                ) : (
+                  editingId ? 'Update Appointment' : 'Book Appointment'
+                )}
+              </button>
 
               {editingId && (
                 <button
@@ -283,8 +436,8 @@ const Home = () => {
                       phone: '',
                       date: '',
                       time: '',
-                      notes: ''
                     });
+                    setError('');
                   }}
                   className="w-full bg-gray-500 text-white py-3 px-6 rounded-lg font-semibold hover:bg-gray-600 transition-colors"
                 >
@@ -305,62 +458,86 @@ const Home = () => {
               </div>
             ) : (
               <div className="space-y-4">
-                {appointments.map(appointment => (
-                  <div key={appointment.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="font-semibold text-gray-800">{appointment.name}</h3>
-                        <p className="text-sm text-gray-600">{appointment.phone}</p>
+                {appointments.map(appointment => {
+                  // Extract data from Google Calendar format
+                  const name = appointment.summary.replace('Meeting with ', '');
+                  const phone = appointment.description.replace('Phone: ', '');
+                  const startDateTime = new Date(appointment.start.dateTime);
+                  const endDateTime = new Date(appointment.end.dateTime);
+                  
+                  return (
+                    <div key={appointment.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-semibold text-gray-800">{name}</h3>
+                          <p className="text-sm text-gray-600">{phone}</p>
+                        </div>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => handleEdit(appointment)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleCancel(appointment.id)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleCancel(appointment.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      
+                      <div className="flex items-center text-sm text-gray-600 mb-2">
+                        <Calendar className="w-4 h-4 mr-2" />
+                        {startDateTime.toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </div>
+                      
+                      <div className="flex items-center text-sm text-gray-600 mb-2">
+                        <Clock className="w-4 h-4 mr-2" />
+                        {startDateTime.toLocaleTimeString('en-US', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false
+                        })} - {endDateTime.toLocaleTimeString('en-US', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false
+                        })}
+                      </div>
+                      
+                      <div className="flex items-center text-sm text-gray-600">
+                        <MapPin className="w-4 h-4 mr-2" />
+                        Delhi
+                      </div>
+                      
+                      <div className="mt-3">
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                          appointment.status === 'confirmed' 
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          <Check className="w-3 h-3 mr-1" />
+                          {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
+                        </span>
                       </div>
                     </div>
-                    
-                    <div className="flex items-center text-sm text-gray-600 mb-2">
-                      <Calendar className="w-4 h-4 mr-2" />
-                      {new Date(appointment.date).toLocaleDateString()}
-                    </div>
-                    
-                    <div className="flex items-center text-sm text-gray-600 mb-2">
-                      <Clock className="w-4 h-4 mr-2" />
-                      {appointment.time}
-                    </div>
-                    
-                    <div className="flex items-center text-sm text-gray-600">
-                      <MapPin className="w-4 h-4 mr-2" />
-                      {appointment.city}
-                    </div>
-                    
-                    {appointment.notes && (
-                      <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-700">{appointment.notes}</p>
-                      </div>
-                    )}
-                    
-                    <div className="mt-3">
-                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        <Check className="w-3 h-3 mr-1" />
-                        Confirmed
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
 
-        {/* Success Message */}
         {showSuccess && (
           <div className="fixed bottom-4 right-4 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg flex items-center">
             <Check className="w-5 h-5 mr-2" />
-            Appointment created successfully!
+            {editingId ? 'Appointment updated successfully!' : 'Appointment created successfully!'}
           </div>
         )}
       </div>

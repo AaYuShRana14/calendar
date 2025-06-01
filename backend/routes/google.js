@@ -1,10 +1,16 @@
 const express = require('express');
+const {OAuth2Client} = require('google-auth-library');
+require('dotenv').config();
 const User= require('../Models/user');
-const { google } = require('googleapis');
+const jwt = require('jsonwebtoken');
 const router = express.Router();
-const oauthClient = require('../config/googleConfig');
+const jwtsecret = process.env.JWT_SECRET;
 router.get('/google', (req, res) => {
-    const authUrl = oauthClient.generateAuthUrl({
+    const authUrl = new OAuth2Client(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        process.env.GOOGLE_REDIRECT_URI
+    ).generateAuthUrl({
         access_type: 'offline',
         scope: [
             'https://www.googleapis.com/auth/userinfo.profile',
@@ -21,31 +27,42 @@ router.get('/google/callback', async (req, res) => {
         return res.status(400).send('No code provided');
     }
     try {
+        const oauthClient = new OAuth2Client(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET,
+            process.env.GOOGLE_REDIRECT_URI
+        );
         const { tokens } = await oauthClient.getToken(code);
-        await oauthClient.setCredentials(tokens);
-        const people = google.people({ version: 'v1', auth: oauthClient });
-        const { data } = await people.people.get({ resourceName: 'people/me', personFields: 'names,emailAddresses' });
-        const profile = data.names[0].displayName;
-        const email = data.emailAddresses[0].value;
-        const user = await User.findOne({ email: email });
-        if (!user) {
-            const newUser = new User({
-                googleId: data.resourceName,
-                email: email,
-                name: profile,
-                accessToken: tokens.access_token,
+        oauthClient.setCredentials(tokens);
+        const response = await fetch(
+      `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${tokens.access_token}`
+    );
+    const data = await response.json();
+    const profile = data.name;
+    const email = data.email;
+    const user = await User.findOne({ email: email });
+    if (!user) {
+        const newUser = new User({
+            email: email,
+            name: profile,
+            accessToken: tokens.access_token,
             });
             await newUser.save();
-        }
-        else {
-            user.googleId = data.resourceName;
+        } else {
             user.email = email;
             user.name = profile;
             user.accessToken = tokens.access_token;
             await user.save();
         }
-        const token = tokens.id_token;
-        return res.redirect('http://localhost:3000' + "auth-redirect?token=" + token);
+        console.log('User authenticated:', user);
+        const token = jwt.sign(
+            { email: user.email},
+            jwtsecret,
+            { expiresIn: '24h' }
+        );
+        const url= new URL('http://localhost:3000/auth-redirect');
+        url.searchParams.set('token', token);
+        res.redirect(url.toString());
 
     } catch (error) {
         console.error('Error during authentication:', error);

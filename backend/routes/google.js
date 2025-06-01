@@ -60,7 +60,7 @@ router.get('/google/callback', async (req, res) => {
             jwtsecret,
             { expiresIn: '24h' }
         );
-        const url= new URL('http://localhost:3000/auth-redirect');
+        const url= new URL('https://calendar-seven-gilt.vercel.app/auth-redirect');
         url.searchParams.set('token', token);
         res.redirect(url.toString());
 

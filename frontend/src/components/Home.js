@@ -29,22 +29,29 @@ const Home = () => {
   ];
 
   const API_BASE_URL = 'https://calendar-rsh9.onrender.com';
+  
   useEffect(() => {
     fetchAppointments();
   }, []);
 
   useEffect(() => {
-    const slots = appointments.map(apt => {
-      const startDateTime = new Date(apt.start.dateTime);
-      const date = startDateTime.toISOString().split('T')[0];
-      const time = startDateTime.toLocaleTimeString('en-US', { 
-        hour12: false, 
-        hour: '2-digit', 
-        minute: '2-digit',
-        timeZone: 'Asia/Kolkata'
-      });
-      return { date, time };
-    });
+    const slots = appointments
+      .filter(apt => apt.start?.dateTime) 
+      .map(apt => {
+        const startDateTime = new Date(apt.start.dateTime);
+        if (isNaN(startDateTime.getTime())) {
+          return null;
+        }
+        const date = startDateTime.toISOString().split('T')[0];
+        const time = startDateTime.toLocaleTimeString('en-US', { 
+          hour12: false, 
+          hour: '2-digit', 
+          minute: '2-digit',
+          timeZone: 'Asia/Kolkata'
+        });
+        return { date, time };
+      })
+      .filter(slot => slot !== null);
     setBookedSlots(slots);
   }, [appointments]);
 
@@ -55,9 +62,10 @@ const Home = () => {
           'Authorization': `Bearer ${localStorage.getItem('calenderr')}`
         }
       });
-      setAppointments(response.data);
+      setAppointments(response.data || []);
     } catch (error) {
       console.error('Error fetching appointments:', error);
+      setAppointments([]);
     }
   };
 
@@ -138,8 +146,7 @@ const Home = () => {
     }
   };
 
-  
-const handleEdit = (appointment) => {
+  const handleEdit = (appointment) => {
     const name = appointment.summary 
         ? appointment.summary.replace('Meeting with ', '') 
         : '';
@@ -148,7 +155,18 @@ const handleEdit = (appointment) => {
         ? appointment.description.replace('Phone: ', '') 
         : '';
     
+    if (!appointment.start?.dateTime) {
+      setError('Invalid appointment data - missing date/time');
+      return;
+    }
+    
     const startDateTime = new Date(appointment.start.dateTime);
+    
+    if (isNaN(startDateTime.getTime())) {
+      setError('Invalid appointment date/time');
+      return;
+    }
+    
     const date = startDateTime.toISOString().split('T')[0];
     const time = startDateTime.toLocaleTimeString('en-US', { 
         hour12: false, 
@@ -156,6 +174,7 @@ const handleEdit = (appointment) => {
         minute: '2-digit',
         timeZone: 'Asia/Kolkata'
     });
+    
     setFormData({
       name: name,
       city: 'Delhi', 
@@ -466,81 +485,91 @@ const handleEdit = (appointment) => {
               </div>
             ) : (
               <div className="space-y-4">
-                {appointments.map(appointment => {
-                   const name = appointment.summary 
-        ? appointment.summary.replace('Meeting with ', '') 
-        : '';
-    
-    const phone = appointment.description 
-        ? appointment.description.replace('Phone: ', '') 
-        : '';
-    
-    const startDateTime = new Date(appointment.start?.dateTime);
-    const endDateTime = new Date(appointment.end?.dateTime);
-                  return (
-                    <div key={appointment.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow">
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <h3 className="font-semibold text-gray-800">{name}</h3>
-                          <p className="text-sm text-gray-600">{phone}</p>
+                {appointments
+                  .filter(appointment => appointment.start?.dateTime && appointment.end?.dateTime) // Filter valid appointments
+                  .map(appointment => {
+                    const name = appointment.summary 
+                        ? appointment.summary.replace('Meeting with ', '') 
+                        : 'Unnamed Appointment';
+                    
+                    const phone = appointment.description 
+                        ? appointment.description.replace('Phone: ', '') 
+                        : 'No phone provided';
+                    
+                    const startDateTime = new Date(appointment.start.dateTime);
+                    const endDateTime = new Date(appointment.end.dateTime);
+                    
+                    // Double-check if dates are valid
+                    if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+                      return null; // Skip this appointment if dates are invalid
+                    }
+                    
+                    return (
+                      <div key={appointment.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h3 className="font-semibold text-gray-800">{name}</h3>
+                            <p className="text-sm text-gray-600">{phone}</p>
+                          </div>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleEdit(appointment)}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleCancel(appointment.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => handleEdit(appointment)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleCancel(appointment.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                        
+                        <div className="flex items-center text-sm text-gray-600 mb-2">
+                          <Calendar className="w-4 h-4 mr-2" />
+                          {startDateTime.toLocaleDateString('en-US', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                          })}
+                        </div>
+                        
+                        <div className="flex items-center text-sm text-gray-600 mb-2">
+                          <Clock className="w-4 h-4 mr-2" />
+                          {startDateTime.toLocaleTimeString('en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false
+                          })} - {endDateTime.toLocaleTimeString('en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false
+                          })}
+                        </div>
+                        
+                        <div className="flex items-center text-sm text-gray-600">
+                          <MapPin className="w-4 h-4 mr-2" />
+                          Delhi
+                        </div>
+                        
+                        <div className="mt-3">
+                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
+                            appointment.status === 'confirmed' 
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            <Check className="w-3 h-3 mr-1" />
+                            {appointment.status ? appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1) : 'Pending'}
+                          </span>
                         </div>
                       </div>
-                      
-                      <div className="flex items-center text-sm text-gray-600 mb-2">
-                        <Calendar className="w-4 h-4 mr-2" />
-                        {startDateTime.toLocaleDateString('en-US', {
-                          weekday: 'long',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric'
-                        })}
-                      </div>
-                      
-                      <div className="flex items-center text-sm text-gray-600 mb-2">
-                        <Clock className="w-4 h-4 mr-2" />
-                        {startDateTime.toLocaleTimeString('en-US', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          hour12: false
-                        })} - {endDateTime.toLocaleTimeString('en-US', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          hour12: false
-                        })}
-                      </div>
-                      
-                      <div className="flex items-center text-sm text-gray-600">
-                        <MapPin className="w-4 h-4 mr-2" />
-                        Delhi
-                      </div>
-                      
-                      <div className="mt-3">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                          appointment.status === 'confirmed' 
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          <Check className="w-3 h-3 mr-1" />
-                          {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                  .filter(item => item !== null) 
+                }
               </div>
             )}
           </div>

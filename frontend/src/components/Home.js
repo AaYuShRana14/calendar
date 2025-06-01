@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, MapPin, User, Check, X, Edit, Trash2, Phone, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, Clock, MapPin, User, Check,Edit, Trash2, Phone } from 'lucide-react';
 import axios from 'axios';
 
 const Home = () => {

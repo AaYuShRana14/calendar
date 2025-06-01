@@ -25,7 +25,7 @@ const Home = () => {
     '15:00', '16:00', '17:00', '18:00', '19:00'
   ];
 
-  const API_BASE_URL = 'http://localhost:8000';
+  const API_BASE_URL = 'https://calendar-rsh9.onrender.com';
   useEffect(() => {
     fetchAppointments();
   }, []);

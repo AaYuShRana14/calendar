@@ -2,7 +2,7 @@ import axios from 'axios';
 const Login=()=>{
     const initGapi = async() => {
     console.log('Initializing Google API');
-    const data=await axios.get('http://localhost:8000/auth/google');
+    const data=await axios.get('https://calendar-rsh9.onrender.com/auth/google');
     const authUrl = data.data.url;
     window.location.href = authUrl;
   };

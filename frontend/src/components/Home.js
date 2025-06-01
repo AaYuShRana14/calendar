@@ -3,6 +3,9 @@ import { Calendar, Clock, MapPin, User, Check,Edit, Trash2, Phone } from 'lucide
 import axios from 'axios';
 
 const Home = () => {
+  if (!localStorage.getItem('calenderr')) {
+    window.location.href = '/login';
+  }
   const [formData, setFormData] = useState({
     name: '',
     city: '',

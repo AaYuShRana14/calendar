@@ -138,19 +138,24 @@ const Home = () => {
     }
   };
 
-  const handleEdit = (appointment) => {
-    const name = appointment.summary.replace('Meeting with ', '');
-    const phone = appointment.description.replace('Phone: ', '');
+  
+const handleEdit = (appointment) => {
+    const name = appointment.summary 
+        ? appointment.summary.replace('Meeting with ', '') 
+        : '';
+    
+    const phone = appointment.description 
+        ? appointment.description.replace('Phone: ', '') 
+        : '';
     
     const startDateTime = new Date(appointment.start.dateTime);
     const date = startDateTime.toISOString().split('T')[0];
     const time = startDateTime.toLocaleTimeString('en-US', { 
-      hour12: false, 
-      hour: '2-digit', 
-      minute: '2-digit',
-      timeZone: 'Asia/Kolkata'
+        hour12: false, 
+        hour: '2-digit', 
+        minute: '2-digit',
+        timeZone: 'Asia/Kolkata'
     });
-
     setFormData({
       name: name,
       city: 'Delhi', 

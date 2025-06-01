@@ -466,13 +466,17 @@ const handleEdit = (appointment) => {
               </div>
             ) : (
               <div className="space-y-4">
-                {appointments.map(appointment => {
-                  // Extract data from Google Calendar format
-                  const name = appointment.summary.replace('Meeting with ', '');
-                  const phone = appointment.description.replace('Phone: ', '');
-                  const startDateTime = new Date(appointment.start.dateTime);
-                  const endDateTime = new Date(appointment.end.dateTime);
-                  
+                {appointments.map(appointment => {t
+                   const name = appointment.summary 
+        ? appointment.summary.replace('Meeting with ', '') 
+        : '';
+    
+    const phone = appointment.description 
+        ? appointment.description.replace('Phone: ', '') 
+        : '';
+    
+    const startDateTime = new Date(appointment.start?.dateTime);
+    const endDateTime = new Date(appointment.end?.dateTime);
                   return (
                     <div key={appointment.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-shadow">
                       <div className="flex justify-between items-start mb-3">
